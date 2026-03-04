@@ -3,6 +3,7 @@
 #include <LittleFS.h>
 
 #include "web_server.h"
+#include "visualizer.h"
 
 // ── Globals ─────────────────────────────────────────────────────────
 
@@ -139,7 +140,9 @@ static void handleStatus() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
 
   String json = "{\"source\":\"";
-  if (animSource == ANIM_LITTLEFS) {
+  if (animSource == ANIM_VISUALIZER) {
+    json += "visualizer\"";
+  } else if (animSource == ANIM_LITTLEFS) {
     json += "custom\",\"frames\":";
     json += lfsFrameCount;
     json += ",\"delay\":";
@@ -219,6 +222,27 @@ static void handleDeleteAnimation() {
   server.send(200, "application/json", "{\"status\":\"ok\"}");
 }
 
+// ── HTTP: toggle sound visualizer ────────────────────────────────────
+
+static void handleVisualizer() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+
+  if (animSource == ANIM_VISUALIZER) {
+    resetVisualizer();
+    animSource = ANIM_BUILTIN;
+    currentFrame = 0;
+    Serial.println("[WEB] Visualizer OFF");
+    server.send(200, "application/json",
+                "{\"status\":\"ok\",\"visualizer\":false}");
+  } else {
+    animSource = ANIM_VISUALIZER;
+    currentFrame = 0;
+    Serial.println("[WEB] Visualizer ON");
+    server.send(200, "application/json",
+                "{\"status\":\"ok\",\"visualizer\":true}");
+  }
+}
+
 // ── HTTP: test page ─────────────────────────────────────────────────
 
 static const char INDEX_HTML[] PROGMEM = R"rawliteral(
@@ -246,6 +270,10 @@ static const char INDEX_HTML[] PROGMEM = R"rawliteral(
   <pre id="status">loading...</pre>
   <button onclick="loadStatus()">Refresh</button>
   <button onclick="deleteAnim()">Delete Custom</button>
+</div>
+<div class="card">
+  <h3>Sound Visualizer</h3>
+  <button onclick="toggleViz()">Toggle Visualizer</button>
 </div>
 <div class="card">
   <h3>Built-in Animations</h3>
@@ -287,6 +315,9 @@ function switchBuiltin(i){
 function deleteAnim(){
   fetch('/animation',{method:'DELETE'}).then(()=>loadStatus());
 }
+function toggleViz(){
+  fetch('/visualizer',{method:'POST'}).then(()=>loadStatus());
+}
 loadStatus();
 </script></body></html>
 )rawliteral";
@@ -321,6 +352,8 @@ void setupWebServer() {
   server.on("/status", HTTP_GET, handleStatus);
   server.on("/builtin", HTTP_POST, handleBuiltin);
   server.on("/builtin", HTTP_OPTIONS, sendCorsOk);
+  server.on("/visualizer", HTTP_POST, handleVisualizer);
+  server.on("/visualizer", HTTP_OPTIONS, sendCorsOk);
 
   server.begin();
   Serial.println("HTTP server ready");

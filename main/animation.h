@@ -39,7 +39,7 @@ extern const BuiltinAnim builtins[];
 extern const uint8_t     BUILTIN_COUNT;
 
 // Playback state
-enum AnimSource : uint8_t { ANIM_BUILTIN, ANIM_LITTLEFS };
+enum AnimSource : uint8_t { ANIM_BUILTIN, ANIM_LITTLEFS, ANIM_VISUALIZER };
 
 extern AnimSource    animSource;
 extern uint8_t       builtinIndex;      // default: logo_anim_v4
@@ -51,6 +51,10 @@ extern unsigned long lastFrameTime;
 
 // Filesystem state
 extern bool fsReady;
+
+// ── XY mapping ──────────────────────────────────────────────────────
+
+uint16_t XY(uint8_t x, uint8_t y);
 
 // ── Animation lifecycle ─────────────────────────────────────────────
 

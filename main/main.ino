@@ -8,6 +8,7 @@
 #include <LittleFS.h>
 
 #include "animation.h"
+#include "visualizer.h"
 #include "web_server.h"
 
 // ── Setup ───────────────────────────────────────────────────────────
@@ -19,6 +20,9 @@ void setup() {
   // Initialize LED matrix + filesystem + animation state.
   initAnimation();
 
+  // Build frequency-band lookup table for the spectrum analyser.
+  initVisualizer();
+
   // Start Wi-Fi access point and HTTP API.
   setupWebServer();
 }
@@ -28,7 +32,9 @@ void setup() {
 void loop() {
   server.handleClient();
 
-  if (millis() - lastFrameTime >= activeFrameDelay) {
+  if (animSource == ANIM_VISUALIZER) {
+    runVisualizer();
+  } else if (millis() - lastFrameTime >= activeFrameDelay) {
     lastFrameTime = millis();
     showNextFrame();
   }
