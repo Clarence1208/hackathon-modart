@@ -9,7 +9,7 @@
 #define WIDTH           32
 #define HEIGHT          16
 #define NUM_LEDS        (WIDTH * HEIGHT)
-#define BRIGHTNESS      40
+#define BRIGHTNESS      100
 #define LED_TYPE        WS2812B
 #define COLOR_ORDER     GRB
 #define PANEL_HEIGHT    8

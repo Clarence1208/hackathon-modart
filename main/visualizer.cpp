@@ -11,6 +11,17 @@ static const float NOISE_FLOOR   = 1500.0f;   // ADC is noisy — need a high fl
 static const float SENSITIVITY   = 20000.0f;  // MaxMag peaks around 15k-27k, scale to fill 16 rows
 static const float SMOOTH_FACTOR = 0.70f;
 
+// ── Haptic / beat detection tunables ────────────────────────────────
+// Bass bins: at 9878 Hz / 256 samples ≈ 38.6 Hz per bin.
+// Bins 2-6 cover ~77-231 Hz (kick drum / bass range).
+static const uint16_t BASS_BIN_START      = 2;
+static const uint16_t BASS_BIN_END        = 7;
+static const float    BASS_NOISE_FLOOR    = 2000.0f;
+static const float    BASS_BEAT_THRESHOLD = 6000.0f;  // raw magnitude above which we consider it a beat
+static const unsigned long PULSE_ON_MS    = 90;       // vibration ON duration per beat
+static const unsigned long PULSE_COOLDOWN_MS = 120;   // minimum gap between two pulses
+static const uint8_t  VIBRATOR_PWM_ON     = 255;
+
 // ── FFT buffers ─────────────────────────────────────────────────────
 
 static double vReal[FFT_SAMPLES];
@@ -28,10 +39,19 @@ static uint16_t bandEnd[WIDTH];
 
 static bool visualizerStarted = false;
 
+// ── Haptic state ────────────────────────────────────────────────────
+
+static unsigned long pulseStartMs  = 0;
+static bool          pulseActive   = false;
+
 // ── Initialisation ──────────────────────────────────────────────────
 
 void initVisualizer() {
   pinMode(MIC_PIN, INPUT);
+
+  // PWM setup for haptic vibrator on GPIO 10
+  ledcAttach(VIBRATOR_PIN, VIBRATOR_PWM_FREQ, VIBRATOR_PWM_RES);
+  ledcWrite(VIBRATOR_PIN, 0);
 
   const int minBin = 3;
   const int maxBin = FFT_SAMPLES / 2 - 1;
@@ -51,7 +71,7 @@ void initVisualizer() {
     colHeight[col] = 0;
   }
 
-  Serial.println("[VIZ] initVisualizer done");
+  Serial.println("[VIZ] initVisualizer done (haptic on GPIO 10)");
 }
 
 // ── Main visualiser tick ────────────────────────────────────────────
@@ -139,7 +159,30 @@ void runVisualizer() {
     if (colHeight[col] < 0.4f) colHeight[col] = 0;
   }
 
-  // ── 5. Render ──────────────────────────────────────────────────
+  // ── 5. Haptic beat pulse (bass peak → short vibration burst) ────
+
+  {
+    double bassPeak = 0;
+    for (uint16_t bin = BASS_BIN_START; bin < BASS_BIN_END; bin++) {
+      if (vReal[bin] > bassPeak) bassPeak = vReal[bin];
+    }
+
+    unsigned long now = millis();
+
+    if (!pulseActive && bassPeak > BASS_BEAT_THRESHOLD
+        && (now - pulseStartMs) > (PULSE_ON_MS + PULSE_COOLDOWN_MS)) {
+      pulseActive  = true;
+      pulseStartMs = now;
+      ledcWrite(VIBRATOR_PIN, VIBRATOR_PWM_ON);
+    }
+
+    if (pulseActive && (now - pulseStartMs) >= PULSE_ON_MS) {
+      pulseActive = false;
+      ledcWrite(VIBRATOR_PIN, 0);
+    }
+  }
+
+  // ── 6. Render ──────────────────────────────────────────────────
 
   FastLED.clear();
 
@@ -158,4 +201,7 @@ void runVisualizer() {
 void resetVisualizer() {
   visualizerStarted = false;
   for (int col = 0; col < WIDTH; col++) colHeight[col] = 0;
+  pulseActive = false;
+  pulseStartMs = 0;
+  ledcWrite(VIBRATOR_PIN, 0);
 }

@@ -8,6 +8,12 @@
 #define FFT_SAMPLES       256
 #define SAMPLING_FREQ     9878.0
 
+// ── Haptic vibrator config ──────────────────────────────────────────
+
+#define VIBRATOR_PIN      10
+#define VIBRATOR_PWM_FREQ 1000
+#define VIBRATOR_PWM_RES  8        // 0-255
+
 // Call once from setup() to configure the ADC pin and build the
 // logarithmic frequency-band table.
 void initVisualizer();
