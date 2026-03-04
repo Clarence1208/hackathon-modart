@@ -6,7 +6,7 @@ for upload to the ModArt ESP32-S2 LED controller.
 JSON format:
   {
     "frameCount": N,
-    "delay": M,
+    "fps": F,
     "data": "RRGGBBRRGGBB..."
   }
 
@@ -14,7 +14,7 @@ JSON format:
   column-major (x outer, y inner), 6 hex chars per pixel.
 
 Usage:
-  python h_to_json.py input.h [output.json] [--delay 150]
+  python h_to_json.py input.h [output.json] [--fps 6]
 """
 
 import re
@@ -56,7 +56,7 @@ def parse_h_file(path: str) -> list[list[list[int]]]:
     return frames
 
 
-def frames_to_json(frames: list[list[list[int]]], delay_ms: int) -> dict:
+def frames_to_json(frames: list[list[list[int]]], fps: int) -> dict:
     """Convert frames to the JSON dict for the ESP32 endpoint."""
     hex_parts = []
     for frame in frames:
@@ -67,7 +67,7 @@ def frames_to_json(frames: list[list[list[int]]], delay_ms: int) -> dict:
 
     return {
         "frameCount": len(frames),
-        "delay": delay_ms,
+        "fps": fps,
         "data": "".join(hex_parts),
     }
 
@@ -78,20 +78,20 @@ def main():
     )
     parser.add_argument("input", help="Input .h file")
     parser.add_argument("output", nargs='?', help="Output .json file (default: same name)")
-    parser.add_argument("--delay", type=int, default=150, help="Frame delay in ms (default: 150)")
+    parser.add_argument("--fps", type=int, default=6, help="Frames per second (default: 6)")
     args = parser.parse_args()
 
     if args.output is None:
         args.output = str(Path(args.input).with_suffix('.json'))
 
     frames = parse_h_file(args.input)
-    payload = frames_to_json(frames, args.delay)
+    payload = frames_to_json(frames, args.fps)
 
     with open(args.output, 'w') as f:
         json.dump(payload, f)
 
     data_len = len(payload["data"])
-    print(f"{payload['frameCount']} frames, {args.delay} ms delay "
+    print(f"{payload['frameCount']} frames, {args.fps} fps "
           f"-> {args.output} ({data_len // 6} pixels, {data_len} hex chars)")
 
 

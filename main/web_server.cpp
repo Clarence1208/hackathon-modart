@@ -31,7 +31,7 @@ static int parseJsonInt(const String& json, const char* key) {
 
 // ── HTTP: upload animation (JSON) ───────────────────────────────────
 // POST /animation
-// Body: {"frameCount": N, "delay": M, "data": "RRGGBBRRGGBB..."}
+// Body: {"frameCount": N, "fps": F, "data": "RRGGBBRRGGBB..."}
 // "data" is a flat hex string — all frames concatenated, column-major
 // (x outer, y inner), 6 hex chars per pixel.
 
@@ -49,7 +49,7 @@ static void handleAnimationPost() {
   int fps = parseJsonInt(body, "fps");
   if (fc <= 0 || fps <= 0) {
     server.send(400, "application/json",
-                "{\"error\":\"invalid frameCount or delay\"}");
+                "{\"error\":\"invalid frameCount or fps\"}");
     return;
   }
 
@@ -126,8 +126,8 @@ static void handleAnimationPost() {
 
     String resp = "{\"status\":\"ok\",\"frames\":";
     resp += lfsFrameCount;
-    resp += ",\"delay\":";
-    resp += lfsFrameDelay;
+    resp += ",\"fps\":";
+    resp += (lfsFrameDelay > 0 ? 1000 / lfsFrameDelay : 0);
     resp += "}";
     server.send(200, "application/json", resp);
   } else {
@@ -149,14 +149,14 @@ static void handleStatus() {
   } else if (animSource == ANIM_LITTLEFS) {
     json += "custom\",\"frames\":";
     json += lfsFrameCount;
-    json += ",\"delay\":";
-    json += lfsFrameDelay;
+    json += ",\"fps\":";
+    json += (lfsFrameDelay > 0 ? 1000 / lfsFrameDelay : 0);
   } else {
     json += "builtin\",\"name\":\"";
     json += builtins[builtinIndex].name;
     json += "\",\"frames\":";
     json += builtins[builtinIndex].frameCount;
-    json += ",\"delay\":150";
+    json += ",\"fps\":6";
   }
   json += ",\"width\":";
   json += WIDTH;
