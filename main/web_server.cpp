@@ -140,7 +140,9 @@ static void handleStatus() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
 
   String json = "{\"source\":\"";
-  if (animSource == ANIM_VISUALIZER) {
+  if (animSource == ANIM_STATIC) {
+    json += "static\"";
+  } else if (animSource == ANIM_VISUALIZER) {
     json += "visualizer\"";
   } else if (animSource == ANIM_LITTLEFS) {
     json += "custom\",\"frames\":";
@@ -241,6 +243,60 @@ static void handleVisualizer() {
     server.send(200, "application/json",
                 "{\"status\":\"ok\",\"visualizer\":true}");
   }
+}
+
+// ── HTTP: static display (no animation, no file save) ───────────────
+// POST /static
+// Body: {"data": "RRGGBBRRGGBB..."}
+// "data" is a flat hex string — one frame, column-major
+// (x outer, y inner), 6 hex chars per pixel.
+
+static void handleStaticPost() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+
+  if (!server.hasArg("plain")) {
+    server.send(400, "application/json", "{\"error\":\"missing body\"}");
+    return;
+  }
+
+  const String& body = server.arg("plain");
+
+  int dataPos = body.indexOf("\"data\"");
+  if (dataPos < 0) {
+    server.send(400, "application/json", "{\"error\":\"missing data field\"}");
+    return;
+  }
+  dataPos = body.indexOf('"', body.indexOf(':', dataPos) + 1);
+  if (dataPos < 0) {
+    server.send(400, "application/json", "{\"error\":\"malformed data field\"}");
+    return;
+  }
+  dataPos += 1;
+
+  size_t expectedHexLen = static_cast<size_t>(WIDTH) * HEIGHT * 6;
+
+  int dataEnd = body.indexOf('"', dataPos);
+  if (dataEnd < 0 || static_cast<size_t>(dataEnd - dataPos) < expectedHexLen) {
+    server.send(400, "application/json", "{\"error\":\"data too short\"}");
+    return;
+  }
+
+  size_t hexIdx = static_cast<size_t>(dataPos);
+  for (uint8_t x = 0; x < WIDTH; x++) {
+    for (uint8_t y = 0; y < HEIGHT; y++) {
+      uint8_t r = static_cast<uint8_t>((hexVal(body[hexIdx])     << 4) | hexVal(body[hexIdx + 1]));
+      uint8_t g = static_cast<uint8_t>((hexVal(body[hexIdx + 2]) << 4) | hexVal(body[hexIdx + 3]));
+      uint8_t b = static_cast<uint8_t>((hexVal(body[hexIdx + 4]) << 4) | hexVal(body[hexIdx + 5]));
+      leds[XY(x, y)] = CRGB(r, g, b);
+      hexIdx += 6;
+    }
+  }
+
+  animSource = ANIM_STATIC;
+  FastLED.show();
+
+  Serial.println("[WEB] Static frame displayed");
+  server.send(200, "application/json", "{\"status\":\"ok\"}");
 }
 
 // ── HTTP: test page ─────────────────────────────────────────────────
@@ -354,6 +410,8 @@ void setupWebServer() {
   server.on("/builtin", HTTP_OPTIONS, sendCorsOk);
   server.on("/visualizer", HTTP_POST, handleVisualizer);
   server.on("/visualizer", HTTP_OPTIONS, sendCorsOk);
+  server.on("/static", HTTP_POST, handleStaticPost);
+  server.on("/static", HTTP_OPTIONS, sendCorsOk);
 
   server.begin();
   Serial.println("HTTP server ready");

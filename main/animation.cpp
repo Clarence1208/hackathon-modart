@@ -120,6 +120,11 @@ bool loadLfsHeader() {
 // ── Non-blocking frame advance ──────────────────────────────────────
 
 void showNextFrame() {
+  if (animSource == ANIM_STATIC) {
+    FastLED.show();
+    return;
+  }
+
   FastLED.clear();
 
   if (animSource == ANIM_LITTLEFS) {
