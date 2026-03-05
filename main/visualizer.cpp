@@ -29,15 +29,22 @@ static const float SMOOTH_FACTOR = 0.70f;
 
 // ── Haptic / beat detection tunables ────────────────────────────────
 // Bass bins: at 9878 Hz / 256 samples ≈ 38.6 Hz per bin.
-// Bins 2-6 cover ~77-231 Hz (kick drum / bass range).
-static const uint16_t BASS_BIN_START   = 2;
-static const uint16_t BASS_BIN_END     = 7;
-static const float    BASS_NOISE_FLOOR = 2000.0f;
-static const float    BASS_SENSITIVITY = 18000.0f;
-static const float    BEAT_ATTACK      = 0.90f;   // fast rise
-static const float    BEAT_DECAY       = 0.60f;   // slower fall — gives a pulse feel
-static const uint8_t  VIBRATOR_MIN_PWM = 0;
-static const uint8_t  VIBRATOR_MAX_PWM = 255;
+// Bins 2-7 cover ~77-270 Hz (kick drum / bass range).
+static const uint16_t BASS_BIN_START     = 2;
+static const uint16_t BASS_BIN_END       = 7;
+static const float    BASS_NOISE_FLOOR   = 800.0f;
+static const float    BASS_SENSITIVITY   = 8000.0f;
+
+// Onset-based beat detection: trigger when current bass exceeds
+// running average by BEAT_THRESHOLD multiplier.
+static const float    BEAT_THRESHOLD     = 1.3f;
+static const float    BEAT_AVG_DECAY     = 0.80f;
+static const float    BEAT_MIN_LEVEL     = 0.12f;
+static const uint32_t BEAT_COOLDOWN_MS   = 60;
+
+// Vibration pulse shape: slam to max on beat, then decay fast.
+static const float    VIB_DECAY          = 0.30f;
+static const uint8_t  VIBRATOR_MAX_PWM   = 255;
 
 // ── FFT buffers ─────────────────────────────────────────────────────
 
@@ -58,7 +65,9 @@ static bool visualizerStarted = false;
 
 // ── Haptic state ────────────────────────────────────────────────────
 
-static float bassEnvelope = 0.0f;
+static float bassAverage  = 0.0f;
+static float vibLevel     = 0.0f;
+static uint32_t lastBeatMs = 0;
 
 // ── Initialisation ──────────────────────────────────────────────────
 
@@ -175,7 +184,7 @@ void runVisualizer() {
     if (colHeight[col] < 0.4f) colHeight[col] = 0;
   }
 
-  // ── 5. Haptic beat detection (bass energy → vibrator PWM) ──────
+  // ── 5. Haptic beat detection (onset → punchy vibration pulse) ───
 
   {
     double bassPeak = 0;
@@ -188,15 +197,21 @@ void runVisualizer() {
       bassLevel = constrain((float)(bassPeak - BASS_NOISE_FLOOR) / BASS_SENSITIVITY, 0.0f, 1.0f);
     }
 
-    if (bassLevel > bassEnvelope) {
-      bassEnvelope = bassEnvelope * (1.0f - BEAT_ATTACK) + bassLevel * BEAT_ATTACK;
+    // Running average of bass level for onset comparison
+    bassAverage = bassAverage * BEAT_AVG_DECAY + bassLevel * (1.0f - BEAT_AVG_DECAY);
+
+    float onsetThreshold = max(bassAverage * BEAT_THRESHOLD, BEAT_MIN_LEVEL);
+    uint32_t now = millis();
+
+    if (bassLevel > onsetThreshold && (now - lastBeatMs) > BEAT_COOLDOWN_MS) {
+      vibLevel = 1.0f;
+      lastBeatMs = now;
     } else {
-      bassEnvelope = bassEnvelope * BEAT_DECAY;
+      vibLevel *= VIB_DECAY;
+      if (vibLevel < 0.02f) vibLevel = 0.0f;
     }
 
-    if (bassEnvelope < 0.02f) bassEnvelope = 0.0f;
-
-    uint8_t pwm = (uint8_t)(VIBRATOR_MIN_PWM + bassEnvelope * (VIBRATOR_MAX_PWM - VIBRATOR_MIN_PWM));
+    uint8_t pwm = (uint8_t)(vibLevel * (float)VIBRATOR_MAX_PWM);
     ledcWrite(VIBRATOR_PIN, pwm);
   }
 
@@ -213,13 +228,15 @@ void runVisualizer() {
 
   FastLED.show();
 
-  delay(40);
+  delay(30);
 }
 
 void resetVisualizer() {
   visualizerStarted = false;
   for (int col = 0; col < WIDTH; col++) colHeight[col] = 0;
-  bassEnvelope = 0.0f;
+  bassAverage = 0.0f;
+  vibLevel    = 0.0f;
+  lastBeatMs  = 0;
   ledcWrite(VIBRATOR_PIN, 0);
 }
 
