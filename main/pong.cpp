@@ -123,14 +123,30 @@ void pongRemovePlayer(uint8_t player) {
 }
 
 // ── Input handling ──────────────────────────────────────────────────
+// Each "up"/"down" message immediately moves the paddle by 1 pixel.
+// The Flutter app should send repeated messages while button is held.
+
+static void clampPaddle(int8_t& paddleY) {
+  int8_t maxY = static_cast<int8_t>(HEIGHT - PONG_PADDLE_HEIGHT);
+  if (paddleY < 0) paddleY = 0;
+  if (paddleY > maxY) paddleY = maxY;
+}
 
 void handlePongInput(uint8_t player, const char* action) {
-  int8_t dir = 0;
-  if (strcmp(action, "up") == 0)        dir = 1;   // Y=0 is bottom, so "up" = +Y
-  else if (strcmp(action, "down") == 0) dir = -1;
+  if (pong.status != PONG_PLAYING && pong.status != PONG_SCORED) return;
 
-  if (player == 1) pong.paddle1Dir = dir;
-  else if (player == 2) pong.paddle2Dir = dir;
+  int8_t delta = 0;
+  if (strcmp(action, "up") == 0)        delta = 1;   // Y=0 is bottom, so "up" = +Y
+  else if (strcmp(action, "down") == 0) delta = -1;
+  else return;
+
+  if (player == 1) {
+    pong.paddle1Y += delta;
+    clampPaddle(pong.paddle1Y);
+  } else if (player == 2) {
+    pong.paddle2Y += delta;
+    clampPaddle(pong.paddle2Y);
+  }
 }
 
 // ── Game update (~30fps) ────────────────────────────────────────────
@@ -149,17 +165,6 @@ void updatePong() {
     }
     return;
   }
-
-  // Move paddles
-  pong.paddle1Y += pong.paddle1Dir;
-  pong.paddle2Y += pong.paddle2Dir;
-
-  // Clamp paddles to field
-  int8_t maxPaddleY = static_cast<int8_t>(HEIGHT - PONG_PADDLE_HEIGHT);
-  if (pong.paddle1Y < 0) pong.paddle1Y = 0;
-  if (pong.paddle1Y > maxPaddleY) pong.paddle1Y = maxPaddleY;
-  if (pong.paddle2Y < 0) pong.paddle2Y = 0;
-  if (pong.paddle2Y > maxPaddleY) pong.paddle2Y = maxPaddleY;
 
   // Move ball
   pong.ballX += pong.ballVX;

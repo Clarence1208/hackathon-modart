@@ -1,17 +1,5 @@
 # Pong Mode — Flutter Integration Guide
 
-## Prerequisites
-
-### ESP32 Side
-
-Install the **WebSockets** library by Markus Sattler via the Arduino Library Manager:
-
-1. Open Arduino IDE
-2. Go to **Sketch > Include Library > Manage Libraries**
-3. Search for **"WebSockets"** by Markus Sattler (Links2004)
-4. Install the latest version
-5. Upload the updated firmware
-
 ### Flutter Side
 
 Add the `web_socket_channel` package to your `pubspec.yaml`:
@@ -41,7 +29,7 @@ Before players can connect via WebSocket, Pong mode must be activated:
 import 'package:http/http.dart' as http;
 
 Future<void> activatePong(String espIp) async {
-  final response = await http.post(Uri.parse('http://$espIp/pong'));
+  final response = await http.post(Uri.parse('http://192.168.4.1//pong'));
   // response body: {"status":"ok","pong":true}
 }
 ```
@@ -56,7 +44,7 @@ To deactivate, send the same `POST /pong` again (it toggles).
 
 Connect to: `ws://<ESP32_IP>:81`
 
-The ESP32 runs a Wi-Fi access point (SSID like `ModArt-XXXX`). The default IP is typically `192.168.4.1`.
+The IP is typically `192.168.4.1`.
 
 ### Messages: Server -> Client
 
@@ -104,13 +92,12 @@ The ESP32 runs a Wi-Fi access point (SSID like `ModArt-XXXX`). The default IP is
 {"type": "input", "action": "up"}
 ```
 
-| Action     | Effect                  |
-|------------|-------------------------|
-| `"up"`     | Move paddle up (hold)   |
-| `"down"`   | Move paddle down (hold) |
-| `"release"`| Stop paddle movement    |
+| Action     | Effect                          |
+|------------|---------------------------------|
+| `"up"`     | Move paddle up by 1 pixel       |
+| `"down"`   | Move paddle down by 1 pixel     |
 
-Send `"up"` or `"down"` on button press, and `"release"` on button release.
+Each message moves the paddle by exactly 1 pixel. To hold a direction, send repeated messages on a timer (e.g. every 50ms) while the button is pressed, and stop the timer on release.
 
 ---
 
@@ -119,6 +106,7 @@ Send `"up"` or `"down"` on button press, and `"release"` on button release.
 ### Full Example: Pong Controller Widget
 
 ```dart
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -133,11 +121,14 @@ class PongController extends StatefulWidget {
 
 class _PongControllerState extends State<PongController> {
   WebSocketChannel? _channel;
+  Timer? _moveTimer;
   int? _player;
   String _status = 'connecting';
   List<int> _score = [0, 0];
   int _winner = 0;
   String? _error;
+
+  static const _repeatInterval = Duration(milliseconds: 50);
 
   @override
   void initState() {
@@ -183,15 +174,29 @@ class _PongControllerState extends State<PongController> {
     }
   }
 
-  void _sendInput(String action) {
+  void _sendAction(String action) {
     _channel?.sink.add(jsonEncode({
       'type': 'input',
       'action': action,
     }));
   }
 
+  void _startMoving(String action) {
+    _moveTimer?.cancel();
+    _sendAction(action);
+    _moveTimer = Timer.periodic(_repeatInterval, (_) {
+      _sendAction(action);
+    });
+  }
+
+  void _stopMoving() {
+    _moveTimer?.cancel();
+    _moveTimer = null;
+  }
+
   @override
   void dispose() {
+    _moveTimer?.cancel();
     _channel?.sink.close();
     super.dispose();
   }
@@ -243,9 +248,9 @@ class _PongControllerState extends State<PongController> {
       children: [
         Expanded(
           child: GestureDetector(
-            onTapDown: (_) => _sendInput('up'),
-            onTapUp: (_) => _sendInput('release'),
-            onTapCancel: () => _sendInput('release'),
+            onTapDown: (_) => _startMoving('up'),
+            onTapUp: (_) => _stopMoving(),
+            onTapCancel: () => _stopMoving(),
             child: Container(
               color: Colors.blue.shade100,
               child: const Center(
@@ -263,9 +268,9 @@ class _PongControllerState extends State<PongController> {
         ),
         Expanded(
           child: GestureDetector(
-            onTapDown: (_) => _sendInput('down'),
-            onTapUp: (_) => _sendInput('release'),
-            onTapCancel: () => _sendInput('release'),
+            onTapDown: (_) => _startMoving('down'),
+            onTapUp: (_) => _stopMoving(),
+            onTapCancel: () => _stopMoving(),
             child: Container(
               color: Colors.red.shade100,
               child: const Center(
@@ -303,7 +308,7 @@ Navigator.push(
 4. Player 2 opens PongController -> connects to ws://192.168.4.1:81
 5. ESP32 assigns player 2, sends {"type":"assign","player":2}
 6. ESP32 starts the game, broadcasts {"type":"state","status":"playing",...}
-7. Players tap Up/Down buttons -> sends {"type":"input","action":"up|down|release"}
+7. Players hold Up/Down buttons -> app sends {"type":"input","action":"up|down"} every 50ms
 8. ESP32 moves paddles, updates ball, renders on LED matrix
 9. ESP32 broadcasts score updates at ~10 Hz
 10. First to 5 wins -> {"type":"state","status":"gameover","winner":1}
