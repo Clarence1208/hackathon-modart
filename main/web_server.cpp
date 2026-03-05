@@ -272,7 +272,13 @@ static void handleStatus() {
     json += builtins[builtinIndex].frameCount;
     json += ",\"fps\":6";
   }
-  json += ",\"width\":";
+  json += ",\"brightness\":";
+  json += FastLED.getBrightness();
+  json += ",\"vizColor\":";
+  json += getVisualizerColorIndex();
+  json += ",\"vizColorName\":\"";
+  json += vizColorNames[getVisualizerColorIndex()];
+  json += "\",\"width\":";
   json += WIDTH;
   json += ",\"height\":";
   json += HEIGHT;
@@ -359,6 +365,89 @@ static void handleVisualizer() {
     server.send(200, "application/json",
                 "{\"status\":\"ok\",\"visualizer\":true}");
   }
+}
+
+// ── HTTP: get/set global brightness ─────────────────────────────────
+// GET  /brightness              → current brightness
+// POST /brightness   Body: {"value": 0..255}
+
+static void handleGetBrightness() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+
+  String json = "{\"brightness\":";
+  json += FastLED.getBrightness();
+  json += "}";
+  server.send(200, "application/json", json);
+}
+
+static void handleSetBrightness() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+
+  if (!server.hasArg("plain")) {
+    server.send(400, "application/json", "{\"error\":\"missing body\"}");
+    return;
+  }
+
+  int val = parseJsonInt(server.arg("plain"), "value");
+  if (val < 0 || val > 255) {
+    server.send(400, "application/json", "{\"error\":\"value must be 0-255\"}");
+    return;
+  }
+
+  FastLED.setBrightness(static_cast<uint8_t>(val));
+  FastLED.show();
+
+  Serial.printf("[WEB] Brightness set to %d\n", val);
+
+  String json = "{\"status\":\"ok\",\"brightness\":";
+  json += val;
+  json += "}";
+  server.send(200, "application/json", json);
+}
+
+// ── HTTP: get/set visualizer color ──────────────────────────────────
+// GET  /color              → current color index & name
+// POST /color   Body: {"index": 0..4}
+
+static void handleGetColor() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+
+  uint8_t idx = getVisualizerColorIndex();
+  String json = "{\"index\":";
+  json += idx;
+  json += ",\"color\":\"";
+  json += vizColorNames[idx];
+  json += "\"}";
+  server.send(200, "application/json", json);
+}
+
+static void handleSetColor() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+
+  if (!server.hasArg("plain")) {
+    server.send(400, "application/json", "{\"error\":\"missing body\"}");
+    return;
+  }
+
+  int idx = parseJsonInt(server.arg("plain"), "index");
+  if (idx < 0 || idx >= VIZ_COLOR_COUNT) {
+    server.send(400, "application/json", "{\"error\":\"index must be 0-4\"}");
+    return;
+  }
+
+  if (!setVisualizerColor(static_cast<uint8_t>(idx))) {
+    server.send(500, "application/json", "{\"error\":\"failed to set color\"}");
+    return;
+  }
+
+  Serial.printf("[WEB] Visualizer color set to %s\n", vizColorNames[idx]);
+
+  String json = "{\"status\":\"ok\",\"color\":\"";
+  json += vizColorNames[idx];
+  json += "\",\"index\":";
+  json += idx;
+  json += "}";
+  server.send(200, "application/json", json);
 }
 
 // ── HTTP: static display (no animation, no file save) ───────────────
@@ -471,8 +560,20 @@ static const char INDEX_HTML[] PROGMEM = R"rawliteral(
   <button onclick="deleteAnim()">Delete Custom</button>
 </div>
 <div class="card">
+  <h3>Brightness</h3>
+  <input type="range" id="bright" min="0" max="255" value="80" style="width:100%">
+  <span id="brightVal">80</span>
+  <button onclick="setBright()">Set</button>
+</div>
+<div class="card">
   <h3>Sound Visualizer</h3>
   <button onclick="toggleViz()">Toggle Visualizer</button>
+  <div style="margin-top:8px"><b>Color:</b></div>
+  <button style="background:#0078FF" onclick="setColor(0)">Ocean Blue</button>
+  <button style="background:#FF0064" onclick="setColor(1)">Hot Pink</button>
+  <button style="background:#00E676" onclick="setColor(2)">Emerald</button>
+  <button style="background:#A000FF" onclick="setColor(3)">Purple</button>
+  <button style="background:#FFAA00" onclick="setColor(4)">Amber</button>
 </div>
 <div class="card">
   <h3>Built-in Animations</h3>
@@ -482,6 +583,10 @@ static const char INDEX_HTML[] PROGMEM = R"rawliteral(
 function loadStatus(){
   fetch('/status').then(r=>r.json()).then(d=>{
     document.getElementById('status').textContent=JSON.stringify(d,null,2);
+    if(d.brightness!==undefined){
+      document.getElementById('bright').value=d.brightness;
+      document.getElementById('brightVal').textContent=d.brightness;
+    }
     let h='';
     (d.builtins||[]).forEach(b=>{
       h+='<button onclick="switchBuiltin('+b.index+')">'+b.name+'</button> ';
@@ -489,6 +594,9 @@ function loadStatus(){
     document.getElementById('builtins').innerHTML=h;
   });
 }
+document.getElementById('bright').addEventListener('input',function(){
+  document.getElementById('brightVal').textContent=this.value;
+});
 function uploadAnim(){
   var f=document.getElementById('animFile').files[0];
   if(!f){document.getElementById('uploadResult').textContent='Pick a .json file first';return;}
@@ -516,6 +624,15 @@ function deleteAnim(){
 }
 function toggleViz(){
   fetch('/visualizer',{method:'POST'}).then(()=>loadStatus());
+}
+function setBright(){
+  var v=document.getElementById('bright').value;
+  fetch('/brightness',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({value:parseInt(v)})}).then(()=>loadStatus());
+}
+function setColor(i){
+  fetch('/color',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({index:i})}).then(()=>loadStatus());
 }
 loadStatus();
 </script></body></html>
@@ -553,6 +670,12 @@ void setupWebServer() {
   server.on("/builtin", HTTP_OPTIONS, sendCorsOk);
   server.on("/visualizer", HTTP_POST, handleVisualizer);
   server.on("/visualizer", HTTP_OPTIONS, sendCorsOk);
+  server.on("/color", HTTP_GET, handleGetColor);
+  server.on("/color", HTTP_POST, handleSetColor);
+  server.on("/color", HTTP_OPTIONS, sendCorsOk);
+  server.on("/brightness", HTTP_GET, handleGetBrightness);
+  server.on("/brightness", HTTP_POST, handleSetBrightness);
+  server.on("/brightness", HTTP_OPTIONS, sendCorsOk);
   server.on("/static", HTTP_POST, handleStaticPost);
   server.on("/static", HTTP_OPTIONS, sendCorsOk);
   server.on("/pong", HTTP_POST, handlePong);

@@ -4,11 +4,27 @@
 #include "visualizer.h"
 #include "animation.h"
 
+// ── Colour palette ──────────────────────────────────────────────────
+
+const CRGB vizColorPalette[VIZ_COLOR_COUNT] = {
+  CRGB(0,   120, 255),   // Ocean Blue (original)
+  CRGB(255, 0,   100),   // Hot Pink
+  CRGB(0,   230, 118),   // Emerald Green
+  CRGB(160, 0,   255),   // Electric Purple
+  CRGB(255, 170, 0),     // Amber Gold
+};
+
+const char* vizColorNames[VIZ_COLOR_COUNT] = {
+  "Ocean Blue", "Hot Pink", "Emerald", "Purple", "Amber"
+};
+
+static uint8_t currentColorIndex = 0;
+
 // ── Tunables ────────────────────────────────────────────────────────
 
-static const CRGB BAR_COLOR      = CRGB(0, 120, 255);
-static const float NOISE_FLOOR   = 1500.0f;   // ADC is noisy — need a high floor to stay dark in silence
-static const float SENSITIVITY   = 20000.0f;  // MaxMag peaks around 15k-27k, scale to fill 16 rows
+static CRGB barColor             = vizColorPalette[0];
+static const float NOISE_FLOOR   = 1500.0f;
+static const float SENSITIVITY   = 20000.0f;
 static const float SMOOTH_FACTOR = 0.70f;
 
 // ── Haptic / beat detection tunables ────────────────────────────────
@@ -84,7 +100,7 @@ void runVisualizer() {
     Serial.println("[VIZ] === VISUALIZER MODE ACTIVE ===");
 
     FastLED.clear();
-    for (int i = 0; i < NUM_LEDS; i++) leds[i] = BAR_COLOR;
+    for (int i = 0; i < NUM_LEDS; i++) leds[i] = barColor;
     FastLED.show();
     delay(400);
     FastLED.clear();
@@ -191,7 +207,7 @@ void runVisualizer() {
   for (int col = 0; col < WIDTH; col++) {
     int barH = (int)(colHeight[col] + 0.5f);
     for (int row = 0; row < barH && row < HEIGHT; row++) {
-      leds[XY(col, row)] = BAR_COLOR;
+      leds[XY(col, row)] = barColor;
     }
   }
 
@@ -205,4 +221,24 @@ void resetVisualizer() {
   for (int col = 0; col < WIDTH; col++) colHeight[col] = 0;
   bassEnvelope = 0.0f;
   ledcWrite(VIBRATOR_PIN, 0);
+}
+
+bool setVisualizerColor(uint8_t index) {
+  if (index >= VIZ_COLOR_COUNT) return false;
+
+  currentColorIndex = index;
+  barColor = vizColorPalette[index];
+
+  FastLED.clear();
+  for (int i = 0; i < NUM_LEDS; i++) leds[i] = barColor;
+  FastLED.show();
+  delay(1000);
+  FastLED.clear();
+  FastLED.show();
+
+  return true;
+}
+
+uint8_t getVisualizerColorIndex() {
+  return currentColorIndex;
 }

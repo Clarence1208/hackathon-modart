@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <FastLED.h>
 
 // ── Microphone / FFT config ─────────────────────────────────────────
 
@@ -14,6 +15,13 @@
 #define VIBRATOR_PWM_FREQ 1000
 #define VIBRATOR_PWM_RES  8        // 0-255
 
+// ── Visualizer color palette ────────────────────────────────────────
+
+#define VIZ_COLOR_COUNT 5
+
+extern const CRGB vizColorPalette[VIZ_COLOR_COUNT];
+extern const char* vizColorNames[VIZ_COLOR_COUNT];
+
 // Call once from setup() to configure the ADC pin and build the
 // logarithmic frequency-band table.
 void initVisualizer();
@@ -25,3 +33,10 @@ void runVisualizer();
 
 // Reset state when leaving visualizer mode.
 void resetVisualizer();
+
+// Switch visualizer bar color. Flashes the new color for 1 second.
+// Returns false if index is out of range.
+bool setVisualizerColor(uint8_t index);
+
+// Current color index (0 .. VIZ_COLOR_COUNT-1).
+uint8_t getVisualizerColorIndex();
