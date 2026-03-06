@@ -4,6 +4,7 @@
 
 #include "web_server.h"
 #include "visualizer.h"
+#include "ncs_ring.h"
 #include "pong.h"
 
 // ── Globals ─────────────────────────────────────────────────────────
@@ -260,6 +261,8 @@ static void handleStatus() {
     json += "static\"";
   } else if (animSource == ANIM_VISUALIZER) {
     json += "visualizer\"";
+  } else if (animSource == ANIM_NCS_RING) {
+    json += "ncs_ring\"";
   } else if (animSource == ANIM_LITTLEFS) {
     json += "custom\",\"frames\":";
     json += lfsFrameCount;
@@ -450,6 +453,27 @@ static void handleSetColor() {
   server.send(200, "application/json", json);
 }
 
+// ── HTTP: toggle NCS ring visualizer ─────────────────────────────────
+
+static void handleNcsRing() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+
+  if (animSource == ANIM_NCS_RING) {
+    resetNcsRing();
+    animSource = ANIM_BUILTIN;
+    currentFrame = 0;
+    Serial.println("[WEB] NCS Ring OFF");
+    server.send(200, "application/json",
+                "{\"status\":\"ok\",\"ncs_ring\":false}");
+  } else {
+    animSource = ANIM_NCS_RING;
+    currentFrame = 0;
+    Serial.println("[WEB] NCS Ring ON");
+    server.send(200, "application/json",
+                "{\"status\":\"ok\",\"ncs_ring\":true}");
+  }
+}
+
 // ── HTTP: static display (no animation, no file save) ───────────────
 // POST /static
 // Body: {"data": "RRGGBBRRGGBB..."}
@@ -568,6 +592,7 @@ static const char INDEX_HTML[] PROGMEM = R"rawliteral(
 <div class="card">
   <h3>Sound Visualizer</h3>
   <button onclick="toggleViz()">Toggle Visualizer</button>
+  <button onclick="toggleNcs()" style="background:#6A1B9A">NCS Ring</button>
   <div style="margin-top:8px"><b>Color:</b></div>
   <button style="background:#0078FF" onclick="setColor(0)">Ocean Blue</button>
   <button style="background:#FF0064" onclick="setColor(1)">Hot Pink</button>
@@ -625,6 +650,9 @@ function deleteAnim(){
 function toggleViz(){
   fetch('/visualizer',{method:'POST'}).then(()=>loadStatus());
 }
+function toggleNcs(){
+  fetch('/ncs_ring',{method:'POST'}).then(()=>loadStatus());
+}
 function setBright(){
   var v=document.getElementById('bright').value;
   fetch('/brightness',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -670,6 +698,8 @@ void setupWebServer() {
   server.on("/builtin", HTTP_OPTIONS, sendCorsOk);
   server.on("/visualizer", HTTP_POST, handleVisualizer);
   server.on("/visualizer", HTTP_OPTIONS, sendCorsOk);
+  server.on("/ncs_ring", HTTP_POST, handleNcsRing);
+  server.on("/ncs_ring", HTTP_OPTIONS, sendCorsOk);
   server.on("/color", HTTP_GET, handleGetColor);
   server.on("/color", HTTP_POST, handleSetColor);
   server.on("/color", HTTP_OPTIONS, sendCorsOk);

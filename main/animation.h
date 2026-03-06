@@ -39,7 +39,7 @@ extern const BuiltinAnim builtins[];
 extern const uint8_t     BUILTIN_COUNT;
 
 // Playback state
-enum AnimSource : uint8_t { ANIM_BUILTIN, ANIM_LITTLEFS, ANIM_VISUALIZER, ANIM_STATIC, ANIM_PONG };
+enum AnimSource : uint8_t { ANIM_BUILTIN, ANIM_LITTLEFS, ANIM_VISUALIZER, ANIM_STATIC, ANIM_PONG, ANIM_NCS_RING };
 
 extern AnimSource    animSource;
 extern uint8_t       builtinIndex;      // default: logo_anim_v4

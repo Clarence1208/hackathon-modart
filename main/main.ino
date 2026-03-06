@@ -9,6 +9,7 @@
 
 #include "animation.h"
 #include "visualizer.h"
+#include "ncs_ring.h"
 #include "web_server.h"
 #include "pong.h"
 
@@ -20,6 +21,7 @@ void setup() {
 
   initAnimation();
   initVisualizer();
+  initNcsRing();
   initPong();
   setupWebServer();
 }
@@ -42,6 +44,8 @@ void loop() {
     }
   } else if (animSource == ANIM_VISUALIZER) {
     runVisualizer();
+  } else if (animSource == ANIM_NCS_RING) {
+    runNcsRing();
   } else if (millis() - lastFrameTime >= activeFrameDelay) {
     lastFrameTime = millis();
     showNextFrame();

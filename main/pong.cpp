@@ -268,7 +268,7 @@ void renderPong() {
 
   // Score display at top of screen (y=0 is bottom, so top = HEIGHT - 6)
   drawDigit(WIDTH / 2 - 5, HEIGHT - 6, pong.score1, colorScore);
-  drawDigit(WIDTH / 2 + 2, HEIGHT - 6, pong.score2, colorScore);
+  drawDigit(WIDTH / 2 + 3, HEIGHT - 6, pong.score2, colorScore);
 
   // "Waiting" indicator: blink paddles if not enough players
   if (pong.status == PONG_WAITING) {
